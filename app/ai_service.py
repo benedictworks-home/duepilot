@@ -6,7 +6,7 @@ from google.genai import types
 load_dotenv()
 
 # Tried in order. If the first is overloaded (503), the second is used.
-MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
+MODELS = ["gemini-2.5-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite"]
 
 client = genai.Client(
     api_key=os.getenv("GOOGLE_API_KEY"),

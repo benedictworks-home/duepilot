@@ -1,4 +1,5 @@
 import os
+import uuid
 import datetime
 from dotenv import load_dotenv
 load_dotenv()
@@ -142,7 +143,7 @@ def approve(pid: int):
             currency=currency,
             return_url=f"{BASE_URL}/paypal/return",
             cancel_url=f"{BASE_URL}/paypal/cancel",
-            request_id=f"duepilot-{pid}",
+            request_id=f"duepilot-{pid}-{uuid.uuid4().hex[:10]}",
         )
         link = paypal.approval_link(order)
     except Exception as e:
