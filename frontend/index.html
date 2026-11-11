@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DuePilot: the AI agent that gets freelancers paid</title>
+<style>
+  :root{--bg:#f4f6fb;--card:#fff;--ink:#0f1a2e;--muted:#5b6b86;--line:#e3e8f2;
+        --brand:#0b3a8f;--ok:#0a8f4e;--warn:#b7791f;--bad:#c0392b;--info:#1f6feb;
+        --okbg:#e6f6ed;--warnbg:#fdf3dc;--badbg:#fdeaea;--infobg:#e8f0fe}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+       background:var(--bg);color:var(--ink);line-height:1.45}
+  header{background:linear-gradient(120deg,#0b3a8f,#0a2a66);color:#fff;padding:18px 24px}
+  header h1{margin:0;font-size:22px}
+  header p{margin:2px 0 0;opacity:.85;font-size:14px}
+  main{max-width:1200px;margin:0 auto;padding:20px;display:grid;gap:20px;
+       grid-template-columns:minmax(0,1.05fr) minmax(0,1fr)}
+  @media(max-width:900px){main{grid-template-columns:1fr}}
+  .tiles{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .tile .label{color:var(--muted);font-size:13px}
+  .tile .value{font-size:26px;font-weight:700;margin-top:2px}
+  .tile.paid .value{color:var(--ok)} .tile.await .value{color:var(--info)} .tile.over .value{color:var(--bad)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .card h2{margin:0 0 12px;font-size:16px}
+  .muted{color:var(--muted)} .small{font-size:12px}
+  #feed{height:400px;overflow:auto;display:flex;flex-direction:column;gap:10px;
+        padding:4px 2px 10px}
+  .msg{max-width:92%;padding:10px 12px;border-radius:12px;font-size:14px;word-wrap:break-word}
+  .msg.user{align-self:flex-end;background:var(--brand);color:#fff}
+  .msg.ai{align-self:flex-start;background:#eef2fa}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+  .chip{background:#eef2fa;border:1px solid var(--line);border-radius:999px;padding:6px 12px;
+        font-size:12px;cursor:pointer;color:var(--ink)}
+  .chip:hover{background:#e1e8f7}
+  .inputrow{display:flex;gap:8px}
+  input[type=text]{flex:1;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px}
+  button,.btn{font:inherit;font-size:13px;padding:8px 12px;border-radius:9px;border:1px solid var(--line);
+        background:#fff;color:var(--ink);cursor:pointer;text-decoration:none;display:inline-block}
+  button:hover,.btn:hover{background:#f1f4fa}
+  button.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+  button.primary:hover{background:#0a2f73}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600}
+  .badge.ok{background:var(--okbg);color:var(--ok)} .badge.warn{background:var(--warnbg);color:var(--warn)}
+  .badge.bad{background:var(--badbg);color:var(--bad)} .badge.info{background:var(--infobg);color:var(--info)}
+  .ap-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line)}
+  td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+  .mini{margin:8px 0}
+  .total{font-weight:700;margin:4px 0 6px}
+  .flags{list-style:none;margin:6px 0 10px;padding:0;font-size:13px}
+  .flags li{padding:3px 0} .flags .bad{color:var(--bad)} .flags .warn{color:var(--warn)} .flags .ok{color:var(--ok)}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .rowbtns{display:flex;gap:6px;flex-wrap:wrap}
+  pre.draft{white-space:pre-wrap;background:#fff;border:1px solid var(--line);border-radius:8px;
+            padding:10px;font:inherit;font-size:13px;margin:6px 0}
+  .err{color:var(--bad);font-size:13px;margin-top:6px}
+  .scroll{overflow-x:auto}
+  #log{list-style:none;margin:0;padding:0;font-size:13px;max-height:260px;overflow:auto}
+  #log li{padding:6px 0;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center}
+  .actor{font-size:11px;padding:2px 7px;border-radius:6px;background:#eef2fa;color:var(--muted);
+         text-transform:uppercase;letter-spacing:.04em}
+  .actor.ai{background:var(--infobg);color:var(--info)} .actor.system{background:var(--warnbg);color:var(--warn)}
+  dialog{border:1px solid var(--line);border-radius:14px;padding:18px;max-width:520px;width:92%}
+  dialog textarea{width:100%;font:inherit;font-size:13px;padding:10px;border:1px solid var(--line);border-radius:8px}
+  footer{text-align:center;color:var(--muted);font-size:12px;padding:6px 0 24px}
+</style>
+</head>
+<body>
+<header>
+  <h1>DuePilot</h1>
+  <p>Chat to get paid. AI drafts the payment request, safety checks review it, you approve, PayPal collects.</p>
+</header>
+
+<main>
+  <section class="tiles">
+    <div class="tile paid"><div class="label">Paid</div><div class="value" id="tPaid">$0.00</div></div>
+    <div class="tile await"><div class="label">Awaiting payment</div><div class="value" id="tAwait">$0.00</div></div>
+    <div class="tile over"><div class="label">Overdue</div><div class="value" id="tOver">$0.00</div></div>
+  </section>
+
+  <section class="card">
+    <h2>Talk to DuePilot</h2>
+    <div id="feed">
+      <div class="msg ai">Hi! Tell me who to bill, e.g. <i>"Invoice Ada (ada@example.com) for 5 logo drafts at $150 each, due in 2 weeks"</i>, or ask <i>"Who owes me money?"</i></div>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="inputrow">
+      <input type="text" id="msg" placeholder="Describe a payment request or ask a question…" autocomplete="off">
+      <button class="primary" id="send">Send</button>
+    </div>
+  </section>
+
+  <section style="display:grid;gap:20px;align-content:start">
+    <div class="card">
+      <h2>Payment requests</h2>
+      <div class="scroll">
+        <table id="orders">
+          <thead><tr><th>Client</th><th>Amount</th><th>Due</th><th>Status</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Agent action log</h2>
+      <ul id="log"></ul>
+    </div>
+  </section>
+</main>
+
+<footer>Sandbox demo. Test money only. Built with PayPal Orders API and Google Gemini.</footer>
+
+<dialog id="dlg">
+  <h3 id="dlgTitle" style="margin-top:0"></h3>
+  <textarea id="dlgText" rows="7"></textarea>
+  <div class="row" style="margin-top:10px">
+    <button class="primary" id="dlgCopy">Copy message</button>
+    <button id="dlgClose">Close</button>
+  </div>
+</dialog>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
+  (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money = (n, cur = "USD") => {
+  try { return new Intl.NumberFormat("en-US", {style:"currency", currency:cur}).format(n || 0); }
+  catch { return (n || 0).toFixed(2) + " " + cur; }
+};
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {headers:{"Content-Type":"application/json"}, ...opts});
+  let data = null;
+  try { data = await res.json(); } catch {}
+  if (!res.ok) {
+    const d = data && data.detail;
+    throw new Error(d ? (typeof d === "string" ? d : JSON.stringify(d)) : "Request failed (" + res.status + ")");
+  }
+  return data;
+}
+
+/* ---------- chat ---------- */
+function addMsg(role, html) {
+  const d = document.createElement("div");
+  d.className = "msg " + role;
+  d.innerHTML = html;
+  $("#feed").appendChild(d);
+  $("#feed").scrollTop = $("#feed").scrollHeight;
+  return d;
+}
+
+async function send(text) {
+  text = (text ?? $("#msg").value).trim();
+  if (!text) return;
+  $("#msg").value = "";
+  $("#send").disabled = true;
+  addMsg("user", esc(text));
+  const thinking = addMsg("ai", '<span class="muted">Thinking…</span>');
+  try {
+    const r = await api("/chat", {method:"POST", body:JSON.stringify({message:text})});
+    thinking.remove();
+    if (r.type === "approval_needed") addApproval(r);
+    else addMsg("ai", esc(r.text).replace(/\n/g, "<br>"));
+  } catch (e) {
+    thinking.remove();
+    addMsg("ai", '<span class="err">' + esc(e.message) + "</span>");
+  }
+  $("#send").disabled = false;
+  $("#msg").focus();
+  refreshAll();
+}
+
+function addApproval(r) {
+  const p = r.proposal, g = r.guardrails, cur = p.currency || "USD";
+  const rows = (p.items || []).map((i) =>
+    "<tr><td>" + esc(i.name) + "</td><td>" + esc(i.quantity) + "</td><td>" + money(i.unit_amount, cur) + "</td></tr>").join("");
+  const flags = [
+    ...(g.blocking || []).map((x) => '<li class="bad">⛔ ' + esc(x) + "</li>"),
+    ...(g.warnings || []).map((x) => '<li class="warn">⚠️ ' + esc(x) + "</li>"),
+  ].join("") || '<li class="ok">✅ All safety checks passed</li>';
+  const level = g.ok ? (g.confidence === "high" ? "ok" : "warn") : "bad";
+
+  const el = addMsg("ai",
+    '<div class="ap-head"><strong>Payment request: needs your approval</strong>' +
+    '<span class="badge ' + level + '">Confidence: ' + esc(g.confidence) + "</span></div>" +
+    '<div class="muted small">To <b>' + esc(p.client_name || "unknown") + "</b> · " +
+      esc(p.client_email || "no email") + " · due " + esc(p.due_date || "unknown") + "</div>" +
+    '<table class="mini"><thead><tr><th>Item</th><th>Qty</th><th>Unit</th></tr></thead><tbody>' + rows + "</tbody></table>" +
+    '<div class="total">Total: ' + money(g.total, cur) + "</div>" +
+    '<ul class="flags">' + flags + "</ul>" +
+    '<div class="row actions">' +
+      '<button class="primary" data-a="approve"' + (g.ok ? "" : " disabled") + ">Approve &amp; create PayPal link</button>" +
+      '<button data-a="reject">Reject</button></div>');
+
+  const actions = el.querySelector(".actions");
+  actions.addEventListener("click", async (ev) => {
+    const a = ev.target.dataset.a;
+    if (!a) return;
+    actions.querySelectorAll("button").forEach((b) => (b.disabled = true));
+    try {
+      if (a === "approve") {
+        const res = await api("/approve/" + r.pending_id, {method:"POST"});
+        actions.outerHTML =
+          '<div class="badge ok">Payment link created</div>' +
+          '<p class="muted small" style="margin:8px 0 0">Message drafted by AI for your client:</p>' +
+          '<pre class="draft">' + esc(res.message_to_client) + "</pre>" +
+          '<div class="row"><button data-copy="' + esc(res.message_to_client) + '">Copy message</button>' +
+          '<a class="btn" href="' + esc(res.payment_link) + '" target="_blank" rel="noopener">Open payment link</a></div>';
+      } else {
+        await api("/reject/" + r.pending_id, {method:"POST"});
+        actions.outerHTML = '<div class="badge bad">Rejected. Nothing was created.</div>';
+      }
+    } catch (e) {
+      actions.querySelectorAll("button").forEach((b) => (b.disabled = false));
+      const err = document.createElement("div");
+      err.className = "err";
+      err.textContent = e.message;
+      actions.after(err);
+    }
+    refreshAll();
+  });
+}
+
+/* ---------- orders, summary, log ---------- */
+function badge(state) {
+  const map = {paid:["ok","Paid"], awaiting_payment:["info","Awaiting payment"], overdue:["bad","Overdue"]};
+  const m = map[state] || ["info", state];
+  return '<span class="badge ' + m[0] + '">' + esc(m[1]) + "</span>";
+}
+
+function renderOrders(list) {
+  const tb = $("#orders tbody");
+  if (!list.length) {
+    tb.innerHTML = '<tr><td colspan="5" class="muted">No payment requests yet. Ask DuePilot to create one.</td></tr>';
+    return;
+  }
+  tb.innerHTML = list.map((o) => {
+    const id = esc(o.paypal_order_id);
+    const actions = o.state !== "paid"
+      ? '<button data-act="refresh" data-id="' + id + '">Check payment</button>' +
+        '<button data-act="reminder" data-id="' + id + '">AI reminder</button>' +
+        '<a class="btn" target="_blank" rel="noopener" href="' + esc(o.approve_url) + '">Pay link</a>'
+      : '<span class="muted small">Paid ' + (o.paid_at ? new Date(o.paid_at).toLocaleDateString() : "") + "</span>";
+    return "<tr><td><b>" + esc(o.client_name) + '</b><div class="muted small">' + esc(o.client_email || "") + "</div></td>" +
+      "<td>" + money(o.amount, o.currency) + "</td><td>" + esc(o.due_date) + "</td><td>" + badge(o.state) + "</td>" +
+      '<td><div class="rowbtns">' + actions + "</div></td></tr>";
+  }).join("");
+}
+
+function renderLog(items) {
+  $("#log").innerHTML = items.slice(0, 15).map((l) =>
+    "<li>" + '<span class="actor ' + esc(l.actor) + '">' + esc(l.actor) + "</span>" +
+    "<span>" + esc(l.event.replace(/_/g, " ")) + "</span>" +
+    '<span class="muted small" style="margin-left:auto">' + new Date(l.timestamp).toLocaleTimeString() + "</span></li>").join("");
+}
+
+async function refreshAll() {
+  try {
+    const [s, log] = await Promise.all([api("/summary"), api("/log")]);
+    $("#tPaid").textContent = money(s.paid_total);
+    $("#tAwait").textContent = money(s.awaiting_total);
+    $("#tOver").textContent = money(s.overdue_total);
+    renderOrders(s.orders);
+    renderLog(log);
+  } catch (e) { console.error(e); }
+}
+
+$("#orders").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-act]");
+  if (!b) return;
+  const id = b.dataset.id, old = b.textContent;
+  b.disabled = true; b.textContent = "…";
+  try {
+    if (b.dataset.act === "refresh") {
+      await api("/orders/" + id + "/refresh", {method:"POST"});
+    } else {
+      const r = await api("/orders/" + id + "/reminder", {method:"POST"});
+      const when = r.days_overdue > 0 ? r.days_overdue + " day(s) overdue" : "not overdue yet";
+      openDialog("AI reminder (" + when + ")", r.message);
+    }
+  } catch (err) { alert(err.message); }
+  b.disabled = false; b.textContent = old;
+  refreshAll();
+});
+
+/* ---------- dialog + copy ---------- */
+function openDialog(title, text) {
+  $("#dlgTitle").textContent = title;
+  $("#dlgText").value = text;
+  $("#dlg").showModal();
+}
+$("#dlgClose").onclick = () => $("#dlg").close();
+$("#dlgCopy").onclick = async (e) => {
+  await navigator.clipboard.writeText($("#dlgText").value);
+  e.target.textContent = "Copied!";
+  setTimeout(() => (e.target.textContent = "Copy message"), 1500);
+};
+document.addEventListener("click", async (e) => {
+  const t = e.target.closest("[data-copy]");
+  if (!t) return;
+  await navigator.clipboard.writeText(t.dataset.copy);
+  t.textContent = "Copied!";
+});
+
+/* ---------- start ---------- */
+const examples = [
+  "Invoice Ada (ada@example.com) for 5 logo drafts at $150 each, due in 2 weeks",
+  "Who owes me money?",
+  "How much have I earned so far?",
+];
+$("#chips").innerHTML = examples.map((x) => '<span class="chip">' + esc(x) + "</span>").join("");
+$("#chips").addEventListener("click", (e) => {
+  if (e.target.classList.contains("chip")) { $("#msg").value = e.target.textContent; $("#msg").focus(); }
+});
+$("#send").onclick = () => send();
+$("#msg").addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+refreshAll();
+setInterval(refreshAll, 15000);
+</script>
+</body>
+</html>

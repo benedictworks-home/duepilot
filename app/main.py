@@ -4,12 +4,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 from app import paypal, ai_service, guardrails, db
 
 # Where PayPal sends the client back after paying. Change on deploy (Render URL).
 BASE_URL = os.getenv("APP_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+
+# Path to the frontend page: <project root>/frontend/index.html
+FRONTEND_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "index.html")
 
 app = FastAPI(title="DuePilot")
 db.init()
@@ -69,7 +73,7 @@ def sync_order(paypal_order_id):
 
 @app.get("/", include_in_schema=False)
 def root():
-    return RedirectResponse(url="/docs")
+    return FileResponse(FRONTEND_FILE)
 
 
 @app.get("/health")
@@ -80,7 +84,13 @@ def health():
 @app.post("/chat")
 def chat(req: ChatRequest):
     db.log("user", "chat", {"message": req.message})
-    parsed = ai_service.parse_request(req.message)
+    try:
+        parsed = ai_service.parse_request(req.message)
+    except Exception as e:
+        db.log("system", "ai_error", {"error": str(e)})
+        raise HTTPException(
+            503, f"The AI service is busy or returned an unreadable answer. "
+                 f"Try again in a moment. ({e})")
 
     if parsed.get("intent") == "create_invoice":
         args = {
@@ -97,7 +107,12 @@ def chat(req: ChatRequest):
                 "proposal": args, "guardrails": guard}
 
     if parsed.get("intent") == "question":
-        text = ai_service.answer_question(req.message, build_summary())
+        try:
+            text = ai_service.answer_question(req.message, build_summary())
+        except Exception as e:
+            db.log("system", "ai_error", {"error": str(e)})
+            raise HTTPException(
+                503, f"The AI service is busy. Try again in a moment. ({e})")
         db.log("ai", "answered_question", {"question": req.message})
         return {"type": "answer", "text": text}
 
@@ -168,6 +183,30 @@ def orders():
 @app.post("/orders/{paypal_order_id}/refresh")
 def refresh(paypal_order_id: str):
     return order_view(sync_order(paypal_order_id))
+
+
+@app.post("/orders/{paypal_order_id}/reminder")
+def reminder(paypal_order_id: str):
+    """AI drafts a reminder whose tone depends on how overdue the payment is."""
+    row = db.get_order_by_paypal_id(paypal_order_id)
+    if not row:
+        raise HTTPException(404, "Unknown order")
+    if row["status"] == "paid":
+        raise HTTPException(400, "This order is already paid")
+    try:
+        due = datetime.date.fromisoformat(row["due_date"])
+        days = (datetime.date.today() - due).days
+    except (ValueError, TypeError):
+        days = 0
+    try:
+        text = ai_service.draft_reminder(row["client_name"], row["amount"],
+                                         row["currency"], row["due_date"],
+                                         days, row["approve_url"])
+    except Exception as e:
+        db.log("system", "ai_error", {"error": str(e)})
+        raise HTTPException(503, f"The AI service is busy. Try again in a moment. ({e})")
+    db.log("ai", "drafted_reminder", {"order": paypal_order_id, "days_overdue": days})
+    return {"message": text, "days_overdue": days}
 
 
 @app.get("/paypal/return", response_class=HTMLResponse)
