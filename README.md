@@ -6,7 +6,7 @@ writes the message to the client, and tracks whether you've been paid.
 
 Built for the *Build What's Next with PayPal and AI* hackathon.
 
-**Live demo:** <your Render URL> (PayPal **sandbox**, test money only)
+**Live demo:** <https://duepilot-nir9.onrender.com/> (PayPal **sandbox**, test money only)
 
 ## What it does
 
